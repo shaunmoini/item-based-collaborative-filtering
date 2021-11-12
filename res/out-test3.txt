@@ -1,0 +1,8 @@
+5 10
+Alice User1 User2 User3 User4 
+Item1 Item2 Item3 Item4 Item5 Item6 Item7 Item8 Item9 Item10 
+1.89 3 4 4 3 0.89 1 1 2 3 
+3 2.64 2 3 3 2 2.16 3 3 4 
+4 3 1.97 3 5 3 2 4 4 3.97 
+3 3 1 2.78 4 3 3 3.33 4 3 
+1 5 5 2 3.67 2 5 5 2 3.98 

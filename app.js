@@ -4,6 +4,10 @@ const rl = require('readline/promises').createInterface({
   output: process.stdout
 });
 
+function transposeMatrix(matrix) {
+  return matrix[0].map((col, c) => matrix.map((row, r) => matrix[r][c]));
+}
+
 // returns indices of array that match value
 function getMatchingIndicies(arr, val) {
   var indicies = [];
@@ -50,11 +54,11 @@ function standardDev(arr) {
   return Math.sqrt(filteredArr.map(x => Math.pow(x - average, 2)).reduce((a, b) => a + b) / filteredArr.length);
 }
 
-// calculates sim(a, b) and returns an array of objects representing 
-function getSimilarity(user, users) {
+// calculates sim(a, b) and returns an array of objects
+function getSimilarity(item, items) {
   let similarities = [];
-  for (let i = 0; i < users.length; i++) {
-    let commonSet = getCommonSet(user.ratings, users[i].ratings);
+  for (let i = 0; i < items.length; i++) {
+    let commonSet = getCommonSet(item.ratings, items[i].ratings);
     let a = commonSet[0];
     let b = commonSet[1];
 
@@ -64,27 +68,26 @@ function getSimilarity(user, users) {
       numerator += (a[j] - mean(a)) * (b[j] - mean(b));
       denominator += standardDev(a) * standardDev(b);
     }
-    
-    if (denominator == 0) similarities.push({ user: users[i].user, ratings: users[i].ratings, correlation: 0 });
-    else similarities.push({ user: users[i].user, ratings: users[i].ratings, correlation: numerator / denominator });
+
+    if (denominator == 0) similarities.push({ item: items[i].item, ratings: items[i].ratings, correlation: 0 });
+    else similarities.push({ item: items[i].item, ratings: items[i].ratings, correlation: numerator / denominator });
   }
 
   return similarities;
 }
 
 // calculates pred(a, p) and returns array with -1 values replaced with predicited value
-function getPrediction(user, users, unratedItems) {
-  let prediction = [...user.ratings];
+function getPrediction(item, items, unratedEntries) {
+  let prediction = [...item.ratings];
 
-  for (let i = 0; i < unratedItems.length; i++) {
+  for (let i = 0; i < unratedEntries.length; i++) {
     let numerator = 0;
     let denominator = 0;
-    for (let j = 0; j < users.length; j++) {
-      numerator += users[j].correlation * (users[j].ratings[unratedItems[i]] - mean(users[j].ratings));
-      denominator += users[j].correlation;
+    for (let j = 0; j < items.length; j++) {
+      numerator += items[j].correlation * items[j].ratings[unratedEntries[i]];
+      denominator += items[j].correlation;
     }
-    let predictedValue = mean(user.ratings) + (numerator / denominator);
-    prediction[unratedItems[i]] = Math.round(predictedValue * 100) / 100;
+    prediction[unratedEntries[i]] = numerator / denominator;
   }
 
   return prediction
@@ -102,8 +105,8 @@ async function main() {
     inputFileArray.forEach((cur, i, arr) => { arr[i] = cur.trim().split(' '); });
 
     // further parsing the input file by extracting user ratings and creating an array of objects
-    let ratingsMatrix = inputFileArray.slice(3);
-    ratingsMatrix.forEach((cur, i, arr) => { arr[i] = { user: i, ratings: cur.map(Number) }; });
+    let ratingsMatrix = transposeMatrix(inputFileArray.slice(3));
+    ratingsMatrix.forEach((cur, i, arr) => { arr[i] = { item: i, ratings: cur.map(Number) }; });
 
     // iterating through ratings matrix and checking if an unrated product exists. If so, calculate the predicted rating...
     let completedMatrix = [];
@@ -120,7 +123,7 @@ async function main() {
     }
 
     // outputting completed matrix to console
-    for(let x of completedMatrix) console.log(...x);
+    for (let x of transposeMatrix(completedMatrix)) console.log(...x);
     main();
   }
   catch (e) {

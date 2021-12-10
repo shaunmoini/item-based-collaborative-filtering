@@ -8,6 +8,17 @@ function transposeMatrix(matrix) {
   return matrix[0].map((col, c) => matrix.map((row, r) => matrix[r][c]));
 }
 
+// removes a specified index from a given array
+function removeIndex(arr, i) {
+  return arr.slice(0, i).concat(arr.slice(i + 1));
+}
+
+// returns the n nearest neighbours
+function getNearestNeighbours(arr, n) {
+  arr.sort((a, b) => { return b.correlation - a.correlation });
+  return arr.filter((x) => { return x.correlation > 0; }).slice(0, n);
+}
+
 // returns indices of array that match value
 function getMatchingIndicies(arr, val) {
   var indicies = [];
@@ -18,76 +29,66 @@ function getMatchingIndicies(arr, val) {
   return indicies;
 }
 
-// removes a specified index from a given array
-function removeIndex(arr, i) {
-  return arr.slice(0, i).concat(arr.slice(i + 1));
-}
-
-// returns the n largest values of an array
-function nLargestValues(arr, n) {
-  arr.sort((a, b) => { return b.correlation - a.correlation });
-  return arr.slice(0, n);
-}
-
 // returns the sets of items that both user a and b have rated
 function getCommonSet(a, b) {
-  let setA = [];
-  let setB = [];
+  let result = [];
   for (let i = 0; i < a.length; i++) {
-    if (a[i] != -1 && b[i] != -1) {
-      setA.push(a[i]);
-      setB.push(b[i]);
-    }
+    if (a[i] != -1 && b[i] != -1) result.push(i);
   }
 
-  return [setA, setB];
+  return result;
 }
 
 function mean(arr) {
-  let filteredArr = arr.filter((x) => { return x != -1 })
+  let filteredArr = arr.filter((x) => { return x != -1 });
   return filteredArr.reduce((a, b) => a + b) / filteredArr.length;
 }
 
-function standardDev(arr) {
-  let filteredArr = arr.filter((x) => { return x != -1 })
-  let average = mean(filteredArr);
-  return Math.sqrt(filteredArr.map(x => Math.pow(x - average, 2)).reduce((a, b) => a + b) / filteredArr.length);
+function getUserAverages(matrix) {
+  let result = [];
+  for (var i = 0; i < matrix.length; i++)
+    result.push(mean(matrix[i]));
+  return result;
 }
 
 // calculates sim(a, b) and returns an array of objects
-function getSimilarity(item, items) {
+function getSimilarity(item, items, userAverages) {
   let similarities = [];
+
   for (let i = 0; i < items.length; i++) {
     let commonSet = getCommonSet(item.ratings, items[i].ratings);
-    let a = commonSet[0];
-    let b = commonSet[1];
 
     let numerator = 0;
-    let denominator = 0;
-    for (let j = 0; j < a.length; j++) {
-      numerator += (a[j] - mean(a)) * (b[j] - mean(b));
-      denominator += standardDev(a) * standardDev(b);
+    let denominator1 = 0;
+    let denominator2 = 0;
+    for (let j = 0; j < commonSet.length; j++) {
+      numerator += (item.ratings[commonSet[j]] - userAverages[commonSet[j]]) * (items[i].ratings[commonSet[j]] - userAverages[commonSet[j]]);
+      denominator1 += Math.pow((item.ratings[commonSet[j]] - userAverages[commonSet[j]]), 2);
+      denominator2 += Math.pow((items[i].ratings[commonSet[j]] - userAverages[commonSet[j]]), 2);
     }
 
-    if (denominator == 0) similarities.push({ item: items[i].item, ratings: items[i].ratings, correlation: 0 });
-    else similarities.push({ item: items[i].item, ratings: items[i].ratings, correlation: numerator / denominator });
+    let denominator = Math.sqrt(denominator1) * Math.sqrt(denominator2);
+    let result = denominator != 0 ? numerator / denominator : 0;
+    similarities.push({ item: items[i].item, ratings: items[i].ratings, correlation: result });
   }
 
   return similarities;
 }
 
 // calculates pred(a, p) and returns array with -1 values replaced with predicited value
-function getPrediction(item, items, unratedEntries) {
+function getPrediction(item, items) {
   let prediction = [...item.ratings];
+  let unratedItems = getMatchingIndicies(prediction, -1);
 
-  for (let i = 0; i < unratedEntries.length; i++) {
+  for (let i = 0; i < unratedItems.length; i++) {
     let numerator = 0;
     let denominator = 0;
     for (let j = 0; j < items.length; j++) {
-      numerator += items[j].correlation * items[j].ratings[unratedEntries[i]];
+      numerator += items[j].correlation * items[j].ratings[unratedItems[i]];
       denominator += items[j].correlation;
     }
-    prediction[unratedEntries[i]] = numerator / denominator;
+
+    prediction[unratedItems[i]] = (numerator / denominator);
   }
 
   return prediction
@@ -104,21 +105,23 @@ async function main() {
     let inputFileArray = inputFile.toString().trim().split('\n');
     inputFileArray.forEach((cur, i, arr) => { arr[i] = cur.trim().split(' '); });
 
-    // further parsing the input file by extracting user ratings and creating an array of objects
-    let ratingsMatrix = transposeMatrix(inputFileArray.slice(3));
-    ratingsMatrix.forEach((cur, i, arr) => { arr[i] = { item: i, ratings: cur.map(Number) }; });
+    let userMatrix = inputFileArray.slice(3);
+    userMatrix.forEach((cur, i, arr) => { arr[i] = cur.map(Number); });
+
+    let itemMatrix = transposeMatrix(inputFileArray.slice(3));
+    itemMatrix.forEach((cur, i, arr) => { arr[i] = { item: i, ratings: cur.map(Number) }; });
 
     // iterating through ratings matrix and checking if an unrated product exists. If so, calculate the predicted rating...
     let completedMatrix = [];
-    for (let i = 0; i < ratingsMatrix.length; i++) {
-      if (ratingsMatrix[i].ratings.includes(-1)) {
-        let correlations = getSimilarity(ratingsMatrix[i], removeIndex(ratingsMatrix, i));
-        let prediction = getPrediction(ratingsMatrix[i], nLargestValues(correlations, neighbourhoodSize), getMatchingIndicies(ratingsMatrix[i].ratings, -1));
+    for (let i = 0; i < itemMatrix.length; i++) {
+      if (itemMatrix[i].ratings.includes(-1)) {
+        let similarity = getSimilarity(itemMatrix[i], removeIndex(itemMatrix, i), getUserAverages(userMatrix));
+        let prediction = getPrediction(itemMatrix[i], getNearestNeighbours(similarity, neighbourhoodSize));
 
         completedMatrix.push(prediction);
       }
       else {
-        completedMatrix.push(ratingsMatrix[i].ratings);
+        completedMatrix.push(itemMatrix[i].ratings);
       }
     }
 
